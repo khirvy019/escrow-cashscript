@@ -1,0 +1,102 @@
+// pragma cashscript ^0.7.5;
+pragma cashscript ^0.8.0;
+
+
+contract Escrow(
+    bytes20    buyer,            // 20 B
+    bytes20    seller,           // 20 B
+    bytes20    servicer,         // 20 B
+    bytes20    arbiter,          // 20 B
+    bytes      deliveryFeePool,  // 23 B
+
+    int amount,          // 1-8 B, amount paid
+    int serviceFee,      // 1-8 B, fee for service provider in sats
+    int arbitrationFee,  // 1-8 B, fee for arbiter in sats
+    int deliveryFee,     // 1-8 B, fee for delivery service/rider in sats
+
+    int keyNftId,       // 4 B, lock nft ID in commitment in the minted nft containing the delivery fee
+    int timestamp, // 4 B, a parameter to ensure uniqueness of contract
+) {
+    // Releases the funds sent by the buyer
+    function release(pubkey pk, sig s, int timestampCheck) {
+        require(timestampCheck == timestamp);
+
+        // Requires that caller is only either the arbiter or the buyer
+        bytes20 pkHash = hash160(pk);
+        require(pkHash == arbiter || pkHash == buyer);
+        require(checkSig(s, pk));
+
+        // Limits the transaction input to 1 & output to 3/4
+        require(tx.inputs.length == 1);
+        if (deliveryFee > 0) {
+            require(tx.outputs.length == 4);
+        } else {
+            require(tx.outputs.length == 3);
+        }
+
+        int txFee = 1000; // hard coded transaction fee
+        int totalInputRequired = amount + serviceFee + arbitrationFee + deliveryFee + txFee;
+        require(tx.inputs[0].value == totalInputRequired);
+
+        bool correctAmount = tx.outputs[0].value == amount;
+        bool correctServiceFee = tx.outputs[1].value == serviceFee;
+        bool correctArbitrationFee = tx.outputs[2].value == arbitrationFee;
+        bool correctDeliveryFee = true;
+        if (deliveryFee > 0) {
+            correctDeliveryFee = tx.outputs[3].value == deliveryFee;
+        }
+        require(correctAmount && correctServiceFee && correctArbitrationFee && correctDeliveryFee);
+
+        // Requires that outputs send to buyer, servicer, and arbiter
+        bytes25 sellerLock = new LockingBytecodeP2PKH(seller);
+        bytes25 arbiterLock = new LockingBytecodeP2PKH(arbiter);
+        bytes25 servicerLock = new LockingBytecodeP2PKH(servicer);
+
+        bool sendsToSeller = tx.outputs[0].lockingBytecode == sellerLock;
+        bool sendsToServicer = tx.outputs[1].lockingBytecode == servicerLock;
+        bool sendsToArbiter = tx.outputs[2].lockingBytecode == arbiterLock;
+        bool sendsToDeliveryFeePool = true;
+        if (deliveryFee > 0) {
+            require(bytes40(bytes(keyNftId, 20) + bytes(deliveryFee, 20)) == tx.outputs[3].nftCommitment);
+            sendsToDeliveryFeePool = tx.outputs[3].lockingBytecode == deliveryFeePool;
+        }
+
+        require(sendsToSeller && sendsToServicer && sendsToArbiter && sendsToDeliveryFeePool);
+    }
+
+    // Releases the funds back to the buyer
+    // service fee & arbitration fee is still paid, only amount & delivery fee is refunded
+    // 
+    // - Number of inputs are not checked to allow multiple funds back to
+    //   buyer in case multiple funds are sent
+    // - The amount sent back to buyer in case funds sent to contract does not
+    //   match the expected amount for 'release'
+    function refund(pubkey pk, sig s, int timestampCheck) {
+        require(timestampCheck == timestamp);
+
+        // Requires that caller is the arbiter 
+        require(hash160(pk) == arbiter);
+        require(checkSig(s, pk));
+
+        // requires that service fees & arbitration fees are still paid
+        bool correctServiceFee = tx.outputs[1].value == serviceFee;
+        bool correctArbitrationFee = tx.outputs[2].value == arbitrationFee;
+        require(correctServiceFee && correctArbitrationFee);
+
+        // Requires that outputs send only to seller, servicer, and arbiter, respectively
+        bytes25 buyerLock = new LockingBytecodeP2PKH(buyer);
+        bytes25 servicerLock = new LockingBytecodeP2PKH(servicer);
+        bytes25 arbiterLock = new LockingBytecodeP2PKH(arbiter);
+
+        bool sendsToBuyer = tx.outputs[0].lockingBytecode == buyerLock;
+        bool sendsToServicer = tx.outputs[1].lockingBytecode == servicerLock;
+        bool sendsToArbiter = tx.outputs[2].lockingBytecode == arbiterLock;
+
+        require(tx.outputs.length == 3);
+        require(sendsToBuyer && sendsToServicer && sendsToArbiter);
+    }
+
+    function doNothing() {
+        require(timestamp >= 0);
+    }
+}

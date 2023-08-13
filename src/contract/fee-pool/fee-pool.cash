@@ -1,0 +1,83 @@
+pragma cashscript ^0.8.0;
+
+/**
+    This contract purpose is to receive "fee"'s from payments in the form of "LockNFT",
+    the LockNFT contains the BCH that is intended to be the "fee".
+
+    The "fee" can be claimed by presenting another NFT "KeyNFT", the 2 NFTs are burned
+    after claiming the escrow
+
+    This contract is also responsible for minting "KeyNFT"s.
+*/
+contract FeePool(
+    bytes20 ownerPkHash,     // 20 B owner of minter nft,
+    bytes32 keyNFTCategory,  // 32 B token category of nft used for minting,
+) {
+    function mintKeyNft() {
+        // The category of inputs & outputs must be the same
+        bytes minterCategory = tx.inputs[0].tokenCategory;
+        bytes minterOutputCategory = tx.outputs[0].tokenCategory;
+        bytes nftOutputCategory = tx.outputs[1].tokenCategory;
+        require(keyNFTCategory + 0x02 == minterCategory); // minting capability
+        require(keyNFTCategory + 0x02 == minterOutputCategory); // minting capability
+        require(keyNFTCategory == nftOutputCategory); // immutable capability
+
+        // the receiver of minting output must be the same
+        // this contract instance
+        bytes minterInput = tx.inputs[0].lockingBytecode;
+        bytes minterOutput = tx.outputs[0].lockingBytecode;
+        require(minterInput == minterOutput);
+
+        // the minter commitment as int must be incremented
+        int oldId = int(tx.inputs[0].nftCommitment);
+        int newId = int(tx.outputs[0].nftCommitment);
+        require(oldId+1 == newId);
+
+        // the minted nft must be the same as 
+        bytes nftIdBytes, bytes amountBytes = tx.outputs[1].nftCommitment.split(20);
+        int nftId = int(nftIdBytes);
+        int amount = int(amountBytes);
+
+        require(newId == nftId);
+        require(amount > 0);
+    }
+
+    /**
+        Releases BCH stored in a lock NFT utxo
+        - Essentially burns the 2 NFTs by using the BCH stored in them
+        - Key NFTs BCH is sent to recipient of the "fee"
+        - Lock NFTs BCH is used as the transaction fee
+     */
+    function claim() {
+        // 2 outputs: lock & key nft
+        // 1 output: receipient of BCH stored in lock NFT
+        require(tx.inputs.length >= 2);
+        require(tx.outputs.length >= 1);
+
+        // 2nd input must a an immutable KeyNFT
+        require(tx.inputs[1].tokenCategory == keyNFTCategory);
+
+        // lock & key nft must have the same commitment
+        // the commitments contain nftId(20 bytes) and expected amount (20 bytes)
+        // totalling to 40 bytes
+        require(tx.inputs[0].nftCommitment == tx.inputs[1].nftCommitment);
+
+        // sent amount must be equal to the commitment data
+        bytes feeAmountBytes = tx.inputs[1].nftCommitment.split(20)[1];
+        int feeAmount = int(feeAmountBytes);
+        require(tx.outputs[0].value == feeAmount);
+
+        // the amount sent must be from lock nft's output
+        require(tx.inputs[this.activeInputIndex].value == feeAmount);
+
+        // the funds must be sent to the owner of the KeyNFT
+        require(tx.inputs[1].lockingBytecode == tx.outputs[0].lockingBytecode);
+    }
+
+    function owner(pubkey pk, sig signature) {
+        require(checkSig(signature, pk));
+
+        bytes20 pkHash = hash160(pk);
+        require(pkHash == ownerPkHash);
+    }
+}

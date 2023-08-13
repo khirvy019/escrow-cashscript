@@ -1,0 +1,118 @@
+// pragma cashscript ^0.7.5;
+pragma cashscript ^0.8.0;
+
+// Escrow temporary holds the funds paid by the buyer while an order is being completed
+//
+// - the funds can be released by the buyer/arbiter to the seller, delivery service, servicer &
+// arbiter(e.g. when the authorized party has verified that the order is okay)
+// - the funds can be refunded by the arbiter back to the buyer(e.g. when the order is not correct)
+contract Escrow(
+    // hash160(pubkey) of entities concerned in the contract
+    bytes20    buyer,            // 33 B
+    bytes20    seller,           // 33 B
+    bytes20    servicer,         // 33 B
+    bytes20    arbiter,          // 33 B
+    // bytes20    deliveryService,  // 33 B
+
+    int amount,          // 1-8 B, amount paid
+    int serviceFee,      // 1-8 B, fee for service provider in sats
+    int arbitrationFee,  // 1-8 B, fee for arbiter in sats
+    int deliveryFee,     // 1-8 B, fee for delivery service/rider in sats
+
+    int timestamp, // 4 B, a parameter to ensure uniqueness of contract
+) {
+    // Releases the funds sent by the buyer
+    function release(
+        pubkey pk,
+        sig s,
+        int timestampCheck,
+        bytes20 deliveryService,
+        datasig deliveryServiceSignature,
+    ) {
+        require(timestampCheck == timestamp);
+
+        // Requires that caller is only either the arbiter or the buyer
+        bytes20 pkHash = hash160(pk);
+        require(pkHash == arbiter || pkHash == buyer);
+        require(checkSig(s, pk));
+
+        // If delivery fee is provided, there must be a recipient for delivery fee
+        if (deliveryFee > 0) {
+            require(deliveryService.length > 0);
+            require(checkDataSig(deliveryServiceSignature, deliveryService, pk));
+        }
+
+        // Limits the transaction input to 1 & output to 3/4
+        require(tx.inputs.length == 1);
+        if (deliveryFee > 0) {
+            require(tx.outputs.length == 4);
+        } else {
+            require(tx.outputs.length == 3);
+        }
+
+        int txFee = 1000; // hard coded transaction fee
+        int totalInputRequired = amount + serviceFee + arbitrationFee + deliveryFee + txFee;
+        require(tx.inputs[0].value == totalInputRequired);
+
+        bool correctAmount = tx.outputs[0].value == amount;
+        bool correctServiceFee = tx.outputs[1].value == serviceFee;
+        bool correctArbitrationFee = tx.outputs[2].value == arbitrationFee;
+        bool correctDeliveryFee = true;
+        if (deliveryFee > 0) {
+            correctDeliveryFee = tx.outputs[3].value == deliveryFee;
+        }
+        require(correctAmount && correctServiceFee && correctArbitrationFee && correctDeliveryFee);
+
+        // Requires that outputs send to buyer, servicer, and arbiter
+        bytes25 sellerLock = new LockingBytecodeP2PKH(seller);
+        bytes25 arbiterLock = new LockingBytecodeP2PKH(arbiter);
+        bytes25 servicerLock = new LockingBytecodeP2PKH(servicer);
+        bytes25 deliveryServiceLock = new LockingBytecodeP2PKH(deliveryService);
+
+        bool sendsToSeller = tx.outputs[0].lockingBytecode == sellerLock;
+        bool sendsToServicer = tx.outputs[1].lockingBytecode == servicerLock;
+        bool sendsToArbiter = tx.outputs[2].lockingBytecode == arbiterLock;
+        bool sendsToDeliveryService = true;
+        if (deliveryFee > 0) {
+            sendsToDeliveryService = tx.outputs[3].lockingBytecode == deliveryServiceLock;
+        }
+
+        require(sendsToSeller && sendsToServicer && sendsToArbiter && sendsToDeliveryService);
+    }
+
+    // Releases the funds back to the buyer
+    function refund(pubkey pk, sig s, int timestampCheck) {
+        require(timestampCheck == timestamp);
+
+        // Requires that caller is the arbiter 
+        require(hash160(pk) == arbiter);
+        require(checkSig(s, pk));
+
+        // Limits the transaction input to 1 & output to 3
+        require(tx.inputs.length == 1);
+        require(tx.outputs.length == 3);
+
+        // Checks that the correct amounts are sent
+        int txFee = 1000; // hardcoded transaction fee
+        int refundedAmount = amount + deliveryFee;
+        int totalInputRequired = refundedAmount + serviceFee + arbitrationFee + txFee;
+        require(tx.inputs[0].value == totalInputRequired);
+
+        bool correctAmount = tx.outputs[0].value == refundedAmount;
+        bool correctServiceFee = tx.outputs[1].value == serviceFee;
+        bool correctArbitrationFee = tx.outputs[2].value == arbitrationFee;
+
+        require(correctAmount && correctServiceFee && correctArbitrationFee);
+
+        // Requires that outputs send to seller, servicer, and arbiter
+        bytes25 buyerLock = new LockingBytecodeP2PKH(buyer);
+        bytes25 servicerLock = new LockingBytecodeP2PKH(servicer);
+        bytes25 arbiterLock = new LockingBytecodeP2PKH(arbiter);
+
+        bool sendsToBuyer = tx.outputs[0].lockingBytecode == buyerLock;
+        bool sendsToServicer = tx.outputs[1].lockingBytecode == servicerLock;
+        bool sendsToArbiter = tx.outputs[2].lockingBytecode == arbiterLock;
+
+        require(sendsToBuyer && sendsToServicer && sendsToArbiter);
+    }
+}

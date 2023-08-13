@@ -1,0 +1,18 @@
+{
+    "dependencies": {
+        "@bitauth/libauth": "^2.0.0-alpha.8",
+        "@psf/bch-js": "^6.2.9",
+        "axios": "^1.4.0",
+        "bchaddrjs": "^0.5.2",
+        "bigi": "^1.4.2",
+        "bitcoincashjs-lib": "^3.3.3",
+        "bitcoinjs-lib": "^6.1.1",
+        "bitcore-lib": "^10.0.5",
+        "bs58": "^5.0.0",
+        "cashc": "^0.8.0",
+        "cashscript": "^0.8.0",
+        "dotenv": "^16.3.1",
+        "yargs": "^17.3.1"
+    },
+    "type": "module"
+}
