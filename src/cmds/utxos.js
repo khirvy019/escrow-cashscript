@@ -60,7 +60,8 @@ export async function handler (argv) {
         return utxo
       })
     const utxosChange = await getUtxos({index: 0, includeWif: true, change: true})
-    printUtxos(bchUtxos)
+    console.log('Found', utxosChange.length, 'UTXO/s from change address')
+    printUtxos(utxosChange)
     bchUtxos.push(...utxosChange)
 
     // const utxos1 = await getUtxos({index: 1, includeWif: true})
