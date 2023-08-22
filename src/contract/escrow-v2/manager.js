@@ -77,6 +77,7 @@ export class Escrow {
       response.feePoolBytecode = binToHex(cashAddressToLockingBytecode(this.params.feePoolAddress).bytecode)
       response.lockNftId = this.params.lockNftId
     }
+    return response
   }
 
   get fundingSats() {
