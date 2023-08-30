@@ -1,5 +1,5 @@
 import { NETWORK } from '../conf.js'
-import { parseSettlementTransaction } from '../contract/escrow-v2/manager.js'
+import { parseSettlementTransaction } from '../contract/escrow/manager.js'
 
 export const command = 'parse-settlement-tx'
 export const desc = 'Reads a settlement transaction'

@@ -1,5 +1,5 @@
 import { ElectrumNetworkProvider } from "cashscript"
-import { Escrow } from "../contract/escrow-v2/manager.js"
+import { Escrow } from "../contract/escrow/manager.js"
 import { FeePool } from "../contract/fee-pool-v2/manager.js"
 import { getIndex } from "../funcs/get-index.js"
 import { calculateTxFee, utxoToInput } from "../utils.js"
@@ -38,6 +38,10 @@ export const builder = {
     alias: 'b',
     desc: 'Broadcast transaction created',
   },
+  version: {
+    alias: 'v',
+    desc: 'Version of escrow contract',
+  }
 }
 
 export async function handler (argv) {
@@ -55,13 +59,13 @@ export async function handler (argv) {
     arbiterPkHash: data3.receiving.pkHash,
     feePoolAddress: feePoolAddr,
 
-    amount: 3229664,
-    serviceFee: 402740,
+    amount: 4089822,
+    serviceFee: 2000,
     arbitrationFee: 3000,
-    deliveryFee: 0,
-    lockNftId: 0,
+    deliveryFee: 370742,
+    lockNftId: 6,
 
-    timestamp: 1691717027096 // "2023-07-31T02:16:42.326536Z"
+    timestamp: 1687834013078 // "2023-07-31T02:16:42.326536Z"
   });
 
 
