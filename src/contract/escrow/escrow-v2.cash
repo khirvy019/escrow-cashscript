@@ -1,0 +1,135 @@
+// pragma cashscript ^0.7.5;
+pragma cashscript ^0.8.0;
+
+
+contract Escrow(
+    bytes20    buyer,            // 20 B
+    bytes20    seller,           // 20 B
+    bytes20    servicer,         // 20 B
+    bytes20    arbiter,          // 20 B
+    bytes      deliveryFeePool,  // 23 B
+
+    int amount,          // 1-8 B, amount paid
+    int serviceFee,      // 1-8 B, fee for service provider in sats
+    int arbitrationFee,  // 1-8 B, fee for arbiter in sats
+    int deliveryFee,     // 1-8 B, fee for delivery service/rider in sats
+
+    int keyNftId,       // 4 B, lock nft ID in commitment in the minted nft containing the delivery fee
+    int timestamp,      // 4 B, a parameter to ensure uniqueness of contract
+) {
+    // Releases the funds sent by the buyer
+    function release(pubkey pk, sig s, int timestampCheck) {
+        require(timestampCheck == timestamp);
+
+        /* 1 - Requires that caller is only either the arbiter or the buyer */
+        bytes20 pkHash = hash160(pk);
+        require(pkHash == arbiter || pkHash == buyer);
+        require(checkSig(s, pk));
+        /* end 1 */
+
+
+        /* 2 - Check output and input counts */
+        require(tx.inputs.length == 1); // input is the funding utxo, must only be 1
+
+        // Limits the number of outputs to 3 or 4 if there is delivery fee
+        // deliveryFee > 0 is casted to in which should be 0 or 1
+        int expectedOutputCount = 3 + int(deliveryFee > 0);
+        require(tx.outputs.length == expectedOutputCount);
+        /* end 2 */
+
+
+        /* 3 - Check amounts of inputs and outputs */
+        int txFee = 1000; // hard coded transaction fee
+        int totalInputRequired = amount + serviceFee + arbitrationFee + deliveryFee + txFee;
+        require(tx.inputs[0].value == totalInputRequired);
+
+        // Checks if amounts are valid
+        require(tx.outputs[0].value == amount); // Checks amount going to seller is correct
+        require(tx.outputs[1].value == serviceFee); // Checks if amount going to servicer is correct
+        require(tx.outputs[2].value == arbitrationFee); // Checks if amount going to arbiter is correct
+        if (deliveryFee > 0) require(tx.outputs[3].value == deliveryFee); // Checks if amount going to delivery rider is correct, given that a delivery fee is provided
+        /* end 3 */
+
+
+        /* 4 - Requires that outputs send to seller, servicer, and arbiter */
+        bytes25 sellerLock = new LockingBytecodeP2PKH(seller);
+        bytes25 arbiterLock = new LockingBytecodeP2PKH(arbiter);
+        bytes25 servicerLock = new LockingBytecodeP2PKH(servicer);
+
+        require(tx.outputs[0].lockingBytecode == sellerLock); // sends to seller
+        require(tx.outputs[1].lockingBytecode == servicerLock); // sends to servicer
+        require(tx.outputs[2].lockingBytecode == arbiterLock); // sends to arbiter
+        if (deliveryFee > 0) {
+            // NFT commitment of delivery fee output must be Key NFT ID and delivery fee amount
+            // - Convert keyNftId from unsigned int to bytes20
+            // - Convert delivery from unsigned int to bytes20
+            // - Concatenate the converted bytes20s
+            require(bytes40(bytes(keyNftId, 20) + bytes(deliveryFee, 20)) == tx.outputs[3].nftCommitment);
+            require(tx.outputs[3].lockingBytecode == deliveryFeePool); // sends to Delivery Fee Pool
+        }
+        /* end 4 */
+    }
+
+    // Releases the funds back to the buyer
+    // service fee & arbitration fee is still paid, only amount & delivery fee is refunded
+    // 
+    // - Number of inputs are not checked to allow multiple funds back to
+    //   buyer in case multiple funds are sent
+    // - The amount sent back to buyer in case funds sent to contract does not
+    //   match the expected amount for 'release'
+    function refund(pubkey pk, sig s, int timestampCheck) {
+        require(timestampCheck == timestamp);
+
+        /* 1 - Requires that caller is the arbiter */ 
+        require(hash160(pk) == arbiter);
+        require(checkSig(s, pk));
+        /* end 1 */
+
+
+        /* 2. Checks if service fee & arbiter fee amounts are correct.
+              Amount going back to buyer is any amount remaining from the input
+        */
+        require(tx.outputs[1].value == serviceFee); // checks if amount going to servicer is correct
+        require(tx.outputs[2].value == arbitrationFee); // checks if amount going to arbiter is correct
+        /* end 2 */
+
+
+        /* 3 - Requires that outputs send to buyer, servicer, and arbiter */
+        bytes25 buyerLock = new LockingBytecodeP2PKH(buyer);
+        bytes25 servicerLock = new LockingBytecodeP2PKH(servicer);
+        bytes25 arbiterLock = new LockingBytecodeP2PKH(arbiter);
+
+        require(tx.outputs.length == 3);
+        require(tx.outputs[0].lockingBytecode == buyerLock); // sends to Buyer
+        require(tx.outputs[1].lockingBytecode == servicerLock); // sends to Servicer
+        require(tx.outputs[2].lockingBytecode == arbiterLock); // sends to Arbiter
+        /* end 3 */
+    }
+
+    // Releases the funds back to the buyer
+    // service fee & arbitration fee is still paid, only amount & delivery fee is refunded
+    // 
+    // - Number of inputs are not checked to allow multiple funds back to
+    //   buyer in case multiple funds are sent
+    // - The amount sent back to buyer in case funds sent to contract does not
+    //   match the expected amount for 'release'
+    function fullRefund(pubkey pk, sig s, int timestampCheck) {
+        require(timestampCheck == timestamp);
+
+        /* 1 - Requires that caller is the arbiter */ 
+        require(hash160(pk) == arbiter);
+        require(checkSig(s, pk));
+        /* end 1 */
+
+        /* 2 - Requires that outputs send to buyer */
+        bytes25 buyerLock = new LockingBytecodeP2PKH(buyer);
+        require(tx.outputs.length == 1);
+        require(tx.outputs[0].lockingBytecode == buyerLock); // sends to Buyer
+        /* end 2 */
+    }
+
+    function doNothing(pubkey pk, sig s) {
+        require(hash160(pk) == arbiter);
+        require(checkSig(s, pk));
+    }
+}

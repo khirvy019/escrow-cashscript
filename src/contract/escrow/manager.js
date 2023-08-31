@@ -26,10 +26,10 @@ export class Escrow {
    * @param {Number} params.deliveryFee
    * @param {Number} params.lockNftId
    * @param {Number} params.timestamp
-   * @param {Object} opts.options
-   * @param {'mainnet' | 'chipnet'} opts.options.network
+   * @param {Object} opts
+   * @param {'v1' | 'v2'} opts.version
    */
-  constructor(params) {
+  constructor(params, opts) {
     this.params = {
       buyerPkHash: params?.buyerPkHash,
       sellerPkHash: params?.sellerPkHash,
@@ -43,6 +43,7 @@ export class Escrow {
       lockNftId: parseInt(params?.lockNftId),
       timestamp: parseInt(params?.timestamp),
     }
+    this.version = opts?.version
   }
 
   get fundingAmounts() {
@@ -146,7 +147,11 @@ export class Escrow {
     const opts = { provider, addressType }
     // opts.addressType = 'p2sh32'
 
-    const artifact = compileFile(new URL('escrow.cash', import.meta.url));
+    let contractFilename = ''
+    if (this.version == 'v1') contractFilename = 'escrow.cash'
+    else if (this.version == 'v2') contractFilename = 'escrow-v2.cash'
+
+    const artifact = compileFile(new URL(contractFilename, import.meta.url));
     const contract = new Contract(artifact,[
       this.contractCreationParams.buyerPkHash,
       this.contractCreationParams.sellerPkHash,

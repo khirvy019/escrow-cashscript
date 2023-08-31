@@ -38,9 +38,10 @@ export const builder = {
     alias: 'b',
     desc: 'Broadcast transaction created',
   },
-  version: {
-    alias: 'v',
+  contractVersion: {
     desc: 'Version of escrow contract',
+    type: 'number',
+    default: 2,
   }
 }
 
@@ -52,25 +53,31 @@ export async function handler (argv) {
   const data2 = await getIndex(0);
   const data3 = await getIndex(0);
 
-  const escrow = new Escrow({
+  const params = {
     buyerPkHash: data.receiving.pkHash,
     sellerPkHash: data1.receiving.pkHash,
     servicerPkHash: data2.receiving.pkHash,
     arbiterPkHash: data3.receiving.pkHash,
     feePoolAddress: feePoolAddr,
 
-    amount: 4089822,
-    serviceFee: 2000,
+    amount: 1412952,
+    serviceFee: 123936,
     arbitrationFee: 3000,
-    deliveryFee: 370742,
-    lockNftId: 6,
+    deliveryFee: 0,
+    lockNftId: 0,
 
-    timestamp: 1687834013078 // "2023-07-31T02:16:42.326536Z"
-  });
+    timestamp: 1693448949394 // "2023-07-31T02:16:42.326536Z"
+  }
+  const opts = {
+    version: `v${argv.contractVersion}`,
+  }
+
+  const escrow = new Escrow(params, opts);
 
 
   const contract = escrow.getContract();
-  console.log('Fee pool address:', feePoolAddr)
+  console.log('Version:', escrow.version);
+  console.log('Contract size:', { opcount: contract.opcount, bytesize: contract.bytesize })
   console.log('Address:', contract.address);
   try {
     console.log('Legacy address:', bchjs.Address.toLegacyAddress(contract.address));
