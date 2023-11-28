@@ -60,13 +60,13 @@ export async function handler (argv) {
     arbiterPkHash: data3.receiving.pkHash,
     feePoolAddress: feePoolAddr,
 
-    amount: 1412952,
-    serviceFee: 123936,
+    amount: 374763,
+    serviceFee: 56214,
     arbitrationFee: 3000,
-    deliveryFee: 0,
-    lockNftId: 0,
+    deliveryFee: 529690,
+    lockNftId: 1700110986385,
 
-    timestamp: 1693448949394 // "2023-07-31T02:16:42.326536Z"
+    timestamp: 1700110986385 // "2023-07-31T02:16:42.326536Z"
   }
   const opts = {
     version: `v${argv.contractVersion}`,
@@ -115,7 +115,7 @@ export async function handler (argv) {
     console.log('hex:', await tx.build())
   } else if (argv.return) {
     console.log('Attempting to return funds in contract')
-    tx = await escrow.returnFunds(NETWORK === 'mainnet' ? data.receiving.address : data.receiving.testnetAddress)
+    tx = await escrow.returnFunds(NETWORK === 'mainnet' ? data.receiving.address : data.receiving.testnetAddress, data3.receiving.privkey)
     console.log('transaction:', tx)
     console.log('hex:', await tx.build())
   }

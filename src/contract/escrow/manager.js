@@ -258,14 +258,24 @@ export class Escrow {
     return refundTx
   }
 
-  async returnFunds(recipient='') {
+  async returnFunds(recipient='', wif='') {
     const contract = this.getContract()
     const utxos = await contract.getUtxos()
 
     const total = utxos.reduce((subtotal, utxo) => subtotal + utxo.satoshis, 0n)
     console.log('Total funds:', total, 'sats')
 
-    const _transaction = contract.functions.doNothing()
+    const args = []
+    if (this.version === 'v2') {
+      const keyPair = bchjs.ECPair.fromWIF(wif)
+      const sig = new SignatureTemplate(keyPair)
+      args.push(pubkey, sig)
+    }
+
+    const pubkeyBytes = bchjs.ECPair.toPublicKey(keyPair)
+    const pubkey = pubkeyBytes.toString('hex')
+
+    const _transaction = contract.functions.doNothing(...args)
       .from(utxos)
       .to(recipient, 546n)
 
@@ -274,7 +284,7 @@ export class Escrow {
     console.log('Calculated fee:', fee, 'sats')
     console.log('Returning', total-fee, 'sats')
 
-    const transaction = contract.functions.doNothing()
+    const transaction = contract.functions.doNothing(...args)
       .from(utxos)
       .to(recipient, total-fee)
 
